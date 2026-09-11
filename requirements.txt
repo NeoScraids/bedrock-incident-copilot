@@ -1,0 +1,6 @@
+litellm>=1.40.0
+pydantic>=2.7.0
+boto3>=1.34.0
+python-dotenv>=1.0.1
+rich>=13.7.1
+click>=8.1.7

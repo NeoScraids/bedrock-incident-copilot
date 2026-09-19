@@ -3,7 +3,8 @@ Agente autonomo de triaje y respuesta a incidentes utilizando LiteLLM y Amazon B
 """
 
 import json
-from typing import Dict, Any
+import time
+from typing import Any, Dict
 from src.config import settings
 from src.models import IncidentAlert, IncidentDiagnosis, RemediationStep
 
@@ -143,11 +144,17 @@ def _generate_mock_diagnosis(alert: IncidentAlert) -> IncidentDiagnosis:
         )
 
 
-def analyze_incident(alert: IncidentAlert) -> IncidentDiagnosis:
+def analyze_incident(alert: IncidentAlert, verbose: bool = False) -> IncidentDiagnosis:
     """
     Ejecuta el analisis del incidente mediante LiteLLM + Bedrock, o fallback en modo mock.
+
+    Args:
+        alert: Alerta de incidente a analizar.
+        verbose: Si es True, imprime el tiempo de respuesta del modelo y el prompt enviado.
     """
     if settings.is_mock:
+        if verbose:
+            print(f"[mock] Generando diagnostico local para '{alert.id}' (sin llamada a Bedrock)")
         return _generate_mock_diagnosis(alert)
 
     try:
@@ -166,6 +173,10 @@ def analyze_incident(alert: IncidentAlert) -> IncidentDiagnosis:
             f"- Eventos K8s: {json.dumps(alert.k8s_events, ensure_ascii=False)}\n"
         )
 
+        if verbose:
+            print(f"[bedrock] Enviando alerta '{alert.id}' al modelo {settings.model}...")
+
+        t0 = time.perf_counter()
         response = litellm.completion(
             model=settings.model,
             messages=[
@@ -176,6 +187,10 @@ def analyze_incident(alert: IncidentAlert) -> IncidentDiagnosis:
             max_tokens=settings.max_tokens,
             response_format={"type": "json_object"}
         )
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        if verbose:
+            print(f"[bedrock] Respuesta recibida en {elapsed_ms:.0f}ms (tokens: {response.usage.total_tokens})")
 
         raw_output = response.choices[0].message.content
         parsed = json.loads(raw_output)
